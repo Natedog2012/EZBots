@@ -20,13 +20,13 @@ local petClasses           = Set.new({ "BST", "DRU", "ENC", "MAG", "NEC", "SHD",
 local M                    = {} -- Module table
 
 -- Configuration
-local REFRESH_INTERVAL_MS  = 1        -- How often to run the update loop (in ms)
+local REFRESH_INTERVAL_MS  = 16       -- Fallback loop delay, matches a typical UI frame budget
 local PUBLISH_INTERVAL_S   = 0.2      -- How often to publish own status (in seconds)
 local STALE_DATA_TIMEOUT_S = 30       -- How long before peer data is considered stale (in seconds)
-local FG_REFRESH_MS        = 1        -- when we're foregrounded, run every millisecond
+local FG_REFRESH_MS        = 16       -- foreground refresh target
 local BG_REFRESH_MS        = 200      -- background only needs 5Hz updates (200ms)
 local lastRefreshTime      = 0        -- track in mq's high‐res clock
-local elapsed              = os.clock -- or mq.clock, whichever you use
+local elapsed              = mq.gettime
 
 -- State Variables
 M.peers                    = {}         -- Stores data received from other peers [id] = {data}
@@ -38,6 +38,9 @@ M.options                  = {          -- Options controlled by the main UI men
     show_endurance    = true,
     show_mana         = true,
     show_pethp        = true,
+    show_aa           = false,
+    show_tribute      = false,
+    show_tribute_value= false,
     show_distance     = true,
     show_target       = true,
     show_combat       = true,
@@ -112,6 +115,20 @@ local function getActualAAPoints()
     end
 end
 
+local function normalizeAAPoints(value)
+    if type(value) == "number" then
+        return value
+    end
+    if type(value) == "string" then
+        local cleaned = value:gsub(",", "")
+        local parsed = tonumber(cleaned)
+        if parsed then
+            return parsed
+        end
+    end
+    return 0
+end
+
 local function requestAAUpdate()
     if not isEZLinuxServer() then
         return -- Don't request AA updates on non-EZ servers
@@ -134,6 +151,10 @@ local function formatNumberWithCommas(num)
         if k == 0 then break end
     end
     return formatted
+end
+
+local function get_target_refresh_interval()
+    return mq.TLO.EverQuest.Foreground() == true and FG_REFRESH_MS or BG_REFRESH_MS
 end
 
 -- Helper: Get health bar color
@@ -212,9 +233,11 @@ local function publishHealthStatus()
         endurance = utils.safeTLO(mq.TLO.Me.PctEndurance, 0),
         mana = utils.safeTLO(mq.TLO.Me.PctMana, 0),
         pethp = utils.safeTLO(mq.TLO.Me.Pet.PctHPs, 0),
+        tribute_active = utils.safeTLO(mq.TLO.Me.TributeActive, false),
+        current_favor = utils.safeTLO(mq.TLO.Me.CurrentFavor, 0),
         zone = utils.safeTLO(mq.TLO.Zone.ShortName, "unknown"),
         distance = 0,
-        aa = getActualAAPoints(), -- Use enhanced AA function (CHANGED)
+        aa = normalizeAAPoints(getActualAAPoints()), -- Use enhanced AA function (CHANGED)
         target = utils.safeTLO(mq.TLO.Target.CleanName, "None"),
         combat_state = utils.safeTLO(mq.TLO.Me.Combat, FALSE),
         casting = utils.safeTLO(mq.TLO.Me.Casting, "None"),
@@ -246,8 +269,10 @@ local function peer_message_handler(message)
         endurance = content.endurance or 0,
         mana = content.mana or 0,
         pethp = content.pethp or 0,
+        tribute_active = (content.tribute_active == true or content.tribute_active == "TRUE") and true or false,
+        current_favor = content.current_favor or 0,
         zone = content.zone or "unknown",
-        aa = content.aa or 0,
+        aa = normalizeAAPoints(content.aa),
         target = content.target or "None",
         combat_state = content.combat_state == true or content.combat_state == "TRUE" or false,
         casting = content.casting or "None",
@@ -288,8 +313,10 @@ local function refreshPeers()
         M.peers[my_entry_id].endurance = utils.safeTLO(mq.TLO.Me.PctEndurance, 0)
         M.peers[my_entry_id].mana = utils.safeTLO(mq.TLO.Me.PctMana, 0)
         M.peers[my_entry_id].pethp = utils.safeTLO(mq.TLO.Me.Pet.PctHPs, 0)
+        M.peers[my_entry_id].tribute_active = utils.safeTLO(mq.TLO.Me.TributeActive, false)
+        M.peers[my_entry_id].current_favor = utils.safeTLO(mq.TLO.Me.CurrentFavor, 0)
         M.peers[my_entry_id].zone = myCurrentZone
-        M.peers[my_entry_id].aa = getActualAAPoints() -- Use enhanced AA function
+        M.peers[my_entry_id].aa = normalizeAAPoints(getActualAAPoints()) -- Use enhanced AA function
         M.peers[my_entry_id].target = utils.safeTLO(mq.TLO.Target.CleanName, "None")
         M.peers[my_entry_id].combat_state = utils.safeTLO(mq.TLO.Me.Combat, TRUE)
         M.peers[my_entry_id].casting = utils.safeTLO(mq.TLO.Me.Casting, "None")
@@ -307,8 +334,10 @@ local function refreshPeers()
             endurance = utils.safeTLO(mq.TLO.Me.PctEndurance, 0),
             mana = utils.safeTLO(mq.TLO.Me.PctMana, 0),
             pethp = utils.safeTLO(mq.TLO.Me.Pet.PctHPs, 0),
+            tribute_active = utils.safeTLO(mq.TLO.Me.TributeActive, false),
+            current_favor = utils.safeTLO(mq.TLO.Me.CurrentFavor, 0),
             zone = myCurrentZone,
-            aa = getActualAAPoints(), -- Use enhanced AA function
+            aa = normalizeAAPoints(getActualAAPoints()), -- Use enhanced AA function
             target = utils.safeTLO(mq.TLO.Target.CleanName, "None"),
             combat_state = utils.safeTLO(mq.TLO.Me.Combat, TRUE),
             casting = utils.safeTLO(mq.TLO.Me.Casting, "None"),
@@ -398,7 +427,8 @@ local function refreshPeers()
         end
     end
 
-    local single_data_row_height = imgui.GetTextLineHeight() + (imgui.GetStyle().CellPadding.y * 2)
+    local font_scale = math.max(0.5, tonumber(M.options.font_scale) or 1.0)
+    local single_data_row_height = (imgui.GetStyle().FontSizeBase * font_scale) + (imgui.GetStyle().CellPadding.y * 2)
     local table_header_actual_row_height = single_data_row_height + 2
     local new_calculated_height = 0
     if num_peer_rows > 0 or num_class_title_rows > 0 then
@@ -454,6 +484,9 @@ function M.draw_peer_list()
     if M.options.show_endurance then column_count = column_count + 1 end
     if M.options.show_mana then column_count = column_count + 1 end
     if M.options.show_pethp then column_count = column_count + 1 end
+    if M.options.show_aa then column_count = column_count + 1 end
+    if M.options.show_tribute then column_count = column_count + 1 end
+    if M.options.show_tribute_value then column_count = column_count + 1 end
     if M.options.show_distance then column_count = column_count + 1 end
     if M.options.show_target then column_count = column_count + 1 end
     if M.options.show_combat then column_count = column_count + 1 end
@@ -489,6 +522,9 @@ function M.draw_peer_list()
     if M.options.show_endurance then imgui.TableSetupColumn("End", ImGuiTableColumnFlags.WidthFixed, 45) end
     if M.options.show_mana then imgui.TableSetupColumn("Mana", ImGuiTableColumnFlags.WidthFixed, 45) end
     if M.options.show_pethp then imgui.TableSetupColumn("PetHP", ImGuiTableColumnFlags.WidthFixed, 45) end
+    if M.options.show_aa then imgui.TableSetupColumn("AA", ImGuiTableColumnFlags.WidthFixed, 90) end
+    if M.options.show_tribute then imgui.TableSetupColumn("Tribute", ImGuiTableColumnFlags.WidthFixed, 55) end
+    if M.options.show_tribute_value then imgui.TableSetupColumn("Tribute Value", ImGuiTableColumnFlags.WidthFixed, 90) end
     if M.options.show_distance then imgui.TableSetupColumn("Dist", ImGuiTableColumnFlags.Sortable, ImGuiTableColumnFlags.WidthFixed, 45) end
     if M.options.show_target then imgui.TableSetupColumn("Target", ImGuiTableColumnFlags.WidthFixed, 100) end
     if M.options.show_combat then imgui.TableSetupColumn("Combat", ImGuiTableColumnFlags.WidthFixed, 70) end
@@ -690,6 +726,33 @@ function M.draw_peer_list()
             imgui.PopStyleColor()
         end
 
+        -- AA Column
+        if M.options.show_aa then
+            imgui.TableNextColumn()
+            local aaVal = normalizeAAPoints(peer.aa)
+            imgui.PushStyleColor(ImGuiCol.Text, ImVec4(0.7, 0.9, 1.0, 1.0))
+            imgui.Text(formatNumberWithCommas(aaVal))
+            imgui.PopStyleColor()
+        end
+
+        -- Tribute Active Column
+        if M.options.show_tribute then
+            imgui.TableNextColumn()
+            local on = peer.tribute_active == true
+            local color = on and ImVec4(0.6, 1.0, 0.6, 1.0) or ImVec4(0.7, 0.7, 0.7, 1.0)
+            imgui.PushStyleColor(ImGuiCol.Text, color)
+            imgui.Text(on and "On" or "Off")
+            imgui.PopStyleColor()
+        end
+
+        -- Tribute Value (Current Favor) Column
+        if M.options.show_tribute_value then
+            imgui.TableNextColumn()
+            local val = tonumber(peer.current_favor or 0) or 0
+            local txt = formatNumberWithCommas(val)
+            imgui.Text(tostring(txt))
+        end
+
         -- Distance Column
         if M.options.show_distance then
             imgui.TableNextColumn()
@@ -873,10 +936,14 @@ end
 function M.draw_sort_editor()
     if not M.show_sort_editor or not M.show_sort_editor.value then return end
     M.options.custom_order = M.options.custom_order or {}
-    local window_open = M.show_sort_editor.value
     imgui.SetNextWindowSize(ImVec2(300, 400), ImGuiCond.FirstUseEver)
 
-    if imgui.Begin("Edit Peer Sort Order", window_open, ImGuiWindowFlags.NoCollapse) then
+    local is_open, should_draw = imgui.Begin("Edit Peer Sort Order", M.show_sort_editor.value, ImGuiWindowFlags.NoCollapse)
+    if not is_open then
+        M.show_sort_editor.value = false
+    end
+
+    if should_draw then
         imgui.Text("Custom Sort Order:")
         imgui.Separator()
 
@@ -967,9 +1034,13 @@ function M.draw_sort_editor()
         if imgui.Button("Cancel") then
             M.show_sort_editor.value = false
         end
-
-        imgui.End()
     end
+
+    imgui.End()
+end
+
+local function get_target_refresh_interval()
+    return mq.TLO.EverQuest.Foreground() == true and FG_REFRESH_MS or BG_REFRESH_MS
 end
 
 function M.load_config()
@@ -1010,17 +1081,13 @@ end
 -- Main update function for the peer module
 function M.update()
     local now = elapsed()
-    local isFG = mq.TLO.EverQuest.Foreground() == true
-
-    -- pick the interval based on focus
-    local targetInterval = isFG and FG_REFRESH_MS or BG_REFRESH_MS
+    local targetInterval = get_target_refresh_interval()
 
     if now - lastRefreshTime >= targetInterval then
-        refreshPeers() -- your heavy work (publish, UI updates, etc.)
+        refreshPeers()
         lastRefreshTime = now
     end
-    publishHealthStatus() -- Publish own status periodically
-    refreshPeers()        -- Refresh peer list, distances, and sorting
+    publishHealthStatus()
 end
 
 mq.bind("/savepeerui", function()
@@ -1044,6 +1111,15 @@ function M.init()
     end
     print("[Peers] Actor mailbox registered successfully.")
 
+    if isEZLinuxServer() then
+        mq.event("aa_display_capture", "Unspent AA: #1#", aaDisplayCallback)
+        mq.event("aa_gain_capture", "#*#You now have #1# ability point(s)#*#", aaGainCallback)
+        print("[Peers] AA events registered for EZ Linux server.")
+        requestAAUpdate()
+    else
+        print("[Peers] Using TLO for AA points on this server.")
+    end
+
     lastAACheckTime = os.time()
     refreshPeers()
     print("[Peers] Initialization complete.")
@@ -1060,7 +1136,7 @@ function M.get_peer_data()
 end
 
 function M.get_refresh_interval()
-    return REFRESH_INTERVAL_MS
+    return get_target_refresh_interval() or REFRESH_INTERVAL_MS
 end
 
 -- Make formatNumberWithCommas available for external use (NEW)
