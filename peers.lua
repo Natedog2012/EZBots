@@ -46,7 +46,7 @@ M.options                  = {          -- Options controlled by the main UI men
     borderless        = false,
     show_player_stats = true,
     use_class         = false,
-    font_scale        = 1.0,
+    font_scale        = 0.5,
     filler_char       = "~ ~ ~ ~ ~",
 }
 M.show_aa_window           = { value = false, } -- Control the visibility of the AA window
@@ -430,7 +430,7 @@ end
 local function switchTo(name)
     if name and type(name) == 'string' and name ~= MyName then
         print(string.format("[Peers] Switching to: %s", name))
-        mq.cmdf('/dex %s /foreground', name)
+        mq.cmdf('/obt %s /foreground', name)
     end
 end
 
@@ -533,7 +533,7 @@ function M.draw_peer_list()
         if first_column_is_name_or_class then
             imgui.TableNextColumn()
             local isSelf = (peer.name == MyName and peer.server == MyServer)
-            local zoneColor = peer.inSameZone and ImVec4(0.8, 1, 0.8, 1) or ImVec4(1, 0.7, 0.7, 1)
+            local zoneColor = (peer.inSameZone and peer.distance < 9999) and ImVec4(0.8, 1, 0.8, 1) or ImVec4(1, 0.7, 0.7, 1)
             if isSelf then zoneColor = ImVec4(1, 1, 0.7, 1) end
             imgui.PushStyleColor(ImGuiCol.Text, zoneColor)
 
@@ -697,9 +697,9 @@ function M.draw_peer_list()
             local distText = "N/A"
             local distColor = ImVec4(0.7, 0.7, 0.7, 1)
             if not peer.inSameZone then
-                distText = "MIA"; distColor = ImVec4(1, 0.6, 0.6, 1)
+                distText = peer.zone; distColor = ImVec4(1, 0.6, 0.6, 1)
             elseif distance >= 9999 then
-                distText = "???"; distColor = ImVec4(1, 1, 0.6, 1)
+                distText = peer.zone; distColor = ImVec4(1, 0.6, 0.6, 1)
             else
                 distText = string.format("%.0f", distance)
                 if distance < 20 then
