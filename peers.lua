@@ -74,6 +74,26 @@ local aa_said              = false
 ---AA Functions with Server-Specific Logic (NEW)
 -------------------------------------------
 
+local function check_wings_status(item_name)
+    local wings_item = mq.TLO.FindItem(item_name)
+    
+    if not wings_item.ID() then
+        return "unk"
+    end
+    
+    -- Get the timer ready value (0 = ready, > 0 = milliseconds remaining)
+    local timer_ready = wings_item.TimerReady()
+	
+	local minutes_ = math.floor(timer_ready/60)
+	local seconds_ = timer_ready % 60
+	
+	if timer_ready == 0 then
+		return "(RDY)"
+	end
+
+	return "(" .. minutes_ ..":".. seconds_ .. ")"
+end
+
 local function isEZLinuxServer()
     local serverName = utils.safeTLO(mq.TLO.EverQuest.Server, "")
     return serverName == "EZ (Linux) x4 Exp"
@@ -242,6 +262,8 @@ local function publishHealthStatus()
         combat_state = utils.safeTLO(mq.TLO.Me.Combat, FALSE),
         casting = utils.safeTLO(mq.TLO.Me.Casting, "None"),
         class = utils.safeTLO(mq.TLO.Me.Class.ShortName, "Unknown"),
+		wings = check_wings_status("Wings of the Angel"),
+		wings2 = check_wings_status("Wings of the Arch Angel"),
     }
     actor_mailbox:send({ mailbox = 'peer_status', }, status)
     lastPublishTime = currentTime
@@ -280,6 +302,8 @@ local function peer_message_handler(message)
         distance = 0,
         inSameZone = false,
         class = content.class or "Unknown",
+		wings = content.wings or nil,
+		wings2 = content.wings2 or nil
     }
     lastUpdateTime[id] = currentTime
 end
@@ -324,6 +348,8 @@ local function refreshPeers()
         M.peers[my_entry_id].distance = 0
         M.peers[my_entry_id].inSameZone = true
         M.peers[my_entry_id].class = utils.safeTLO(mq.TLO.Me.Class.ShortName, "unknown")
+		M.peers[my_entry_id].wings = check_wings_status("Wings of the Angel")
+		M.peers[my_entry_id].wings2 = check_wings_status("Wings of the Arch Angel")
     else
         -- Create new self entry
         M.peers[my_entry_id] = {
@@ -345,6 +371,8 @@ local function refreshPeers()
             distance = 0,
             inSameZone = true,
             class = utils.safeTLO(mq.TLO.Me.Class.ShortName, "unknown"),
+			wings = check_wings_status("Wings of the Angel"),
+			wings2 = check_wings_status("Wings of the Arch Angel")
         }
     end
     table.insert(new_peer_list, M.peers[my_entry_id])
@@ -570,6 +598,10 @@ function M.draw_peer_list()
             imgui.TableNextColumn()
             local isSelf = (peer.name == MyName and peer.server == MyServer)
             local zoneColor = (peer.inSameZone and peer.distance < 9999) and ImVec4(0.8, 1, 0.8, 1) or ImVec4(1, 0.7, 0.7, 1)
+			if peer.wings2 == "(RDY)" then
+				--print("We got someone ready?")
+				zoneColor = ImVec4(0.0, .6, 0.5, 1)
+			end
             if isSelf then zoneColor = ImVec4(1, 1, 0.7, 1) end
             imgui.PushStyleColor(ImGuiCol.Text, zoneColor)
 
@@ -578,11 +610,14 @@ function M.draw_peer_list()
                 displayValue = peer.class or "Unknown"
             end
             local uniqueLabel = string.format("%s##%s_peer", displayValue, peer.id)
-
+			
+			imgui.PushStyleColor(ImGuiCol.HeaderHovered, 0.8, 0.10, 0.10, 0.50) -- hover
+			
             if imgui.Selectable(uniqueLabel, false, ImGuiSelectableFlags.SpanAllColumns) then
                 if not isSelf then switchTo(peer.name) end
             end
-            imgui.PopStyleColor()
+            imgui.PopStyleColor(2)
+			
 
             if imgui.IsItemHovered() then
                 imgui.BeginTooltip()
@@ -654,6 +689,18 @@ function M.draw_peer_list()
                     end
 
                     imgui.Separator()
+					
+					if imgui.MenuItem("NavMe") then
+                        mq.cmdf('/obt %s navme', peer.name)
+                    end
+					
+					if imgui.MenuItem(string.format("Wings %s",peer.wings)) then
+                        mq.cmdf('/obt %s cast wings %s" 0', peer.name,peer.name)
+                    end
+					
+					if imgui.MenuItem(string.format("Wings2 %s",peer.wings2)) then
+                        mq.cmdf('/obt %s cast wings2 %s 0"', peer.name,peer.name)
+                    end
 
                     if imgui.MenuItem("Set as Main Assist") then
                         mq.cmdf('/grouproles set %s 2', peer.name)
