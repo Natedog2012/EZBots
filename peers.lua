@@ -611,14 +611,15 @@ function M.draw_peer_list()
             end
             local uniqueLabel = string.format("%s##%s_peer", displayValue, peer.id)
 			
-			imgui.PushStyleColor(ImGuiCol.HeaderHovered, 0.8, 0.10, 0.10, 0.50) -- hover
 			
+			imgui.PushStyleColor(ImGuiCol.HeaderHovered, 0.8, 0.10, 0.10, 0.50) -- hover
+			imgui.PushStyleColor(ImGuiCol.HeaderActive, 0.8, 0.10, 0.10, 0.50) -- hover active?
             if imgui.Selectable(uniqueLabel, false, ImGuiSelectableFlags.SpanAllColumns) then
                 if not isSelf then switchTo(peer.name) end
             end
-            imgui.PopStyleColor(2)
+            imgui.PopStyleColor(3)
 			
-
+			
             if imgui.IsItemHovered() then
                 imgui.BeginTooltip()
                 imgui.Text("Name : %s", peer.name)
@@ -633,7 +634,9 @@ function M.draw_peer_list()
             if imgui.BeginPopupContextItem(string.format("##PeerContext_%s", peer.id)) then
                 imgui.Text(peer.name)
                 imgui.Separator()
-
+				imgui.PushStyleColor(ImGuiCol.Header, 0.8, 0.10, 0.10, 0.50) -- keep hover color active on previous hover
+				imgui.PushStyleColor(ImGuiCol.HeaderHovered, 0.8, 0.10, 0.10, 0.50) -- hover
+				
                 if isSelf then
                     if imgui.MenuItem("Follow Me") then
                         mq.cmd('/aca /target id ${Me.ID}')
@@ -689,6 +692,15 @@ function M.draw_peer_list()
                     end
 
                     imgui.Separator()
+					if imgui.BeginMenu("Cast") then
+                        if imgui.MenuItem("Gate") then
+							mq.cmdf('/obt %s cast gate %s', peer.name, peer.name)
+						end
+						if imgui.MenuItem("Summon") then
+							mq.cmdf('/obt %s cast coh %s', peer.name, peer.name)
+						end
+						imgui.EndMenu()
+                    end
 					
 					if imgui.MenuItem("NavMe") then
                         mq.cmdf('/obt %s navme', peer.name)
@@ -718,6 +730,7 @@ function M.draw_peer_list()
                         mq.cmdf('/grouproles unset %s', peer.name)
                     end
                 end
+				imgui.PopStyleColor(2)
                 imgui.EndPopup()
             end
         end
