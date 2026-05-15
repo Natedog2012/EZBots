@@ -639,43 +639,39 @@ function M.draw_peer_list()
 				
                 if isSelf then
                     if imgui.MenuItem("Follow Me") then
-                        mq.cmd('/aca /target id ${Me.ID}')
-                        mq.cmd('/aca /afollow on')
+                        mq.cmd('/ob followme on')
                     end
 
-                    if imgui.MenuItem("Follow Off") then
-                        mq.cmd('/aca /afollow off')
+                    if imgui.MenuItem("Stop All") then
+                        mq.cmd('/ob stopall')
                     end
 
                     imgui.Separator()
 
                     if imgui.MenuItem("Come to Me") then
-                        mq.cmdf('/aca /nav spawn %s', peer.name)
+                        mq.cmd('/ob navme')
+                    end
+					if imgui.MenuItem("Nav My Loc") then
+                        mq.cmdf('/obm /nav loc %f %f %f dist=25', mq.TLO.Me.Y(), mq.TLO.Me.X(), mq.TLO.Me.Z())
                     end
 
                     if imgui.MenuItem("Stop Navigation") then
-                        mq.cmd('/aca /nav stop')
+                        mq.cmd('/ob /nav stop')
                     end
 
                     imgui.Separator()
 
-                    if imgui.MenuItem("Camp Here") then
-                        mq.cmd('/acaa /makecamp on')
+                    if imgui.MenuItem("Camp") then
+                        mq.cmd('/ob camp')
                     end
 
-                    if imgui.MenuItem("Camp Off") then
-                        mq.cmd('/acaa /makecamp off')
+                    if imgui.MenuItem("Giveme All") then
+                        mq.cmd('/ob giveme all')
                     end
 
                     imgui.Separator()
 
-                    if imgui.MenuItem("Pause All") then
-                        mq.cmd('/acaa /mqpause on')
-                    end
-
-                    if imgui.MenuItem("Unpause All") then
-                        mq.cmd('/acaa /mqpause off')
-                    end
+               
                 else
                     if imgui.MenuItem("Target") then
                         targetCharacter(peer.name)
@@ -699,36 +695,46 @@ function M.draw_peer_list()
 						if imgui.MenuItem("Summon") then
 							mq.cmdf('/obt %s cast coh %s', peer.name, peer.name)
 						end
+						if imgui.MenuItem("Succor") then
+							mq.cmdf('/obt %s cast succor %s', peer.name, peer.name)
+						end
 						imgui.EndMenu()
                     end
 					
-					if imgui.MenuItem("NavMe") then
-                        mq.cmdf('/obt %s navme', peer.name)
+					if imgui.BeginMenu("Omnibot") then
+						if imgui.MenuItem("Loot") then
+							mq.cmdf('/obt %s lootall', peer.name)
+						end
+                        if imgui.MenuItem("NavMe") then
+							mq.cmdf('/obt %s navme', peer.name)
+						end
+						if imgui.MenuItem(string.format("Wings %s",peer.wings)) then
+							mq.cmdf('/obt %s cast wings %s" 0', peer.name,peer.name)
+						end
+						if imgui.MenuItem(string.format("Wings2 %s",peer.wings2)) then
+							mq.cmdf('/obt %s cast wings2 %s 0"', peer.name,peer.name)
+						end
+						imgui.EndMenu()
                     end
 					
-					if imgui.MenuItem(string.format("Wings %s",peer.wings)) then
-                        mq.cmdf('/obt %s cast wings %s" 0', peer.name,peer.name)
-                    end
-					
-					if imgui.MenuItem(string.format("Wings2 %s",peer.wings2)) then
-                        mq.cmdf('/obt %s cast wings2 %s 0"', peer.name,peer.name)
-                    end
-
-                    if imgui.MenuItem("Set as Main Assist") then
-                        mq.cmdf('/grouproles set %s 2', peer.name)
-                    end
-
-                    if imgui.MenuItem("Set as Main Tank") then
-                        mq.cmdf('/grouproles set %s 1', peer.name)
-                    end
-
-                    if imgui.MenuItem("Set as Puller") then
-                        mq.cmdf('/grouproles set %s 3', peer.name)
-                    end
-
-                    if imgui.MenuItem("Remove Group Role") then
-                        mq.cmdf('/grouproles unset %s', peer.name)
-                    end
+					if imgui.BeginMenu("Group Roles") then
+						if imgui.MenuItem("Set as Main Assist") then
+							mq.cmdf('/grouproles set %s 2', peer.name)
+						end
+	
+						if imgui.MenuItem("Set as Main Tank") then
+							mq.cmdf('/grouproles set %s 1', peer.name)
+						end
+	
+						if imgui.MenuItem("Set as Puller") then
+							mq.cmdf('/grouproles set %s 3', peer.name)
+						end
+	
+						if imgui.MenuItem("Remove Group Role") then
+							mq.cmdf('/grouproles unset %s', peer.name)
+						end
+						imgui.EndMenu()
+					end
                 end
 				imgui.PopStyleColor(2)
                 imgui.EndPopup()
